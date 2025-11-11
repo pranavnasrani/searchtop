@@ -1,7 +1,7 @@
 import React, { useState, useEffect, FormEvent } from 'react';
-import { Laptop, Scores } from '../types';
+// FIX: Moved LaptopData import from firebaseService.ts to types.ts.
+import { Laptop, Scores, LaptopData } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
-import { LaptopData } from '../services/firebaseService';
 
 interface LaptopFormModalProps {
   laptop: Laptop | null;

@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { LaptopData } from '../services/firebaseService';
+// FIX: Changed LaptopData import from firebaseService to types.
+import { LaptopData } from '../types';
 import { CloseIcon } from './icons/CloseIcon';
 import { PlusIcon } from './icons/PlusIcon';
 import { RefreshIcon } from './icons/RefreshIcon';

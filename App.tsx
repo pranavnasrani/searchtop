@@ -5,9 +5,10 @@ import FilterPanel from './components/FilterPanel';
 import LaptopCard from './components/LaptopCard';
 import Spinner from './components/Spinner';
 import LaptopDetailModal from './components/LaptopDetailModal';
-import { Laptop, Filters, Weights } from './types';
-import { fetchLaptops, addLaptop, updateLaptop, deleteLaptop, LaptopData } from './services/firebaseService';
-import { getWeightsFromQuery, findNewLaptops } from './services/geminiService';
+// FIX: Moved LaptopData import from firebaseService to types.
+import { Laptop, Filters, Weights, LaptopData } from './types';
+import { fetchLaptops, addLaptop, updateLaptop, deleteLaptop } from './services/firebaseService';
+import { getWeightsFromQuery, findNewLaptops, scrapeNewLaptops } from './services/geminiService';
 import WeightagePanel from './components/WeightagePanel';
 import { useAuth } from './contexts/AuthContext';
 import LaptopFormModal from './components/LaptopFormModal';
@@ -40,10 +41,12 @@ const App: React.FC = () => {
     gpus: [],
   });
   
-  // State for Admin "Find New Laptops" feature
+  // State for Admin features
   const [isFindingLaptops, setIsFindingLaptops] = useState(false);
+  const [isScrapingLaptops, setIsScrapingLaptops] = useState(false);
   const [suggestedLaptops, setSuggestedLaptops] = useState<LaptopData[] | null>(null);
   const [findError, setFindError] = useState<string | null>(null);
+  const [lastAdminAction, setLastAdminAction] = useState<'find' | 'scrape' | null>(null);
 
   const loadLaptops = async () => {
     setIsLoading(true);
@@ -165,8 +168,8 @@ const App: React.FC = () => {
     setIsFormModalOpen(true);
   };
 
-  // Handlers for "Find New Laptops" feature
   const handleFindNewLaptops = async () => {
+    setLastAdminAction('find');
     setIsFindingLaptops(true);
     setFindError(null);
     setSuggestedLaptops(null);
@@ -180,6 +183,24 @@ const App: React.FC = () => {
       setSuggestedLaptops([]); // Open modal to show the error
     } finally {
       setIsFindingLaptops(false);
+    }
+  };
+
+  const handleScrapeLaptops = async () => {
+    setLastAdminAction('scrape');
+    setIsScrapingLaptops(true);
+    setFindError(null);
+    setSuggestedLaptops(null);
+    try {
+      const existingNames = allLaptops.map(l => l.name);
+      const newLaptops = await scrapeNewLaptops(existingNames);
+      setSuggestedLaptops(newLaptops);
+    } catch (e: any) {
+      console.error("Failed to scrape for new laptops:", e);
+      setFindError(e.message || "An unknown error occurred while scraping for new laptops.");
+      setSuggestedLaptops([]); // Open modal to show the error
+    } finally {
+      setIsScrapingLaptops(false);
     }
   };
 
@@ -209,7 +230,12 @@ const App: React.FC = () => {
                 allGpus={uniqueGpus}
                 priceRange={priceRange}
             />
-            {isAdmin && <AdminPanel onFindNewLaptops={handleFindNewLaptops} isFinding={isFindingLaptops} />}
+            {isAdmin && <AdminPanel 
+              onFindNewLaptops={handleFindNewLaptops} 
+              isFinding={isFindingLaptops}
+              onScrapeLaptops={handleScrapeLaptops}
+              isScraping={isScrapingLaptops}
+            />}
           </aside>
 
           <div className="lg:col-span-3">
@@ -263,7 +289,7 @@ const App: React.FC = () => {
           onClose={() => setSuggestedLaptops(null)}
           onAdd={handleAddSuggestedLaptop}
           error={findError}
-          onRetry={handleFindNewLaptops}
+          onRetry={lastAdminAction === 'scrape' ? handleScrapeLaptops : handleFindNewLaptops}
         />
       )}
     </div>

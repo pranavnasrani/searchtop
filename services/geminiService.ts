@@ -163,7 +163,7 @@ const newLaptopSchema = {
 
 export const findNewLaptops = async (existingLaptopNames: string[]): Promise<LaptopData[]> => {
   try {
-    const prompt = `You are a laptop technology expert. Find 3-5 recently released high-profile laptops (from the last 6 months) that are NOT in this list of existing laptops: [${existingLaptopNames.join(', ')}]. For each new laptop you find, provide its detailed specifications and estimate its scores from 0-10 for the given categories. Return the data in the required JSON format. Ensure all fields are filled to the best of your ability. If a specific detail isn't widely available, make a reasonable estimate.`;
+    const prompt = `You are a laptop technology expert. Find 3-5 recently released high-profile laptops (from the last 6 months) that are NOT in this list of existing laptops: [${existingLaptopNames.join(', ')}]. For each new laptop you find, provide its detailed specifications and estimate its scores from 0-10 for the given categories. Return the data in the required JSON format. Ensure all fields are filled to the best of your ability. If a specific detail isn't widely available, make a reasonable estimate. If you cannot find any new laptops that fit the criteria, return a JSON object with an empty "laptops" array.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-2.5-pro",
@@ -182,5 +182,29 @@ export const findNewLaptops = async (existingLaptopNames: string[]): Promise<Lap
   } catch (error) {
     console.error("Error finding new laptops from Gemini:", error);
     throw new Error("Failed to find new laptops. The model may be unavailable or returned an invalid response.");
+  }
+};
+
+export const scrapeNewLaptops = async (existingLaptopNames: string[]): Promise<LaptopData[]> => {
+  try {
+    const prompt = `Act as a tech research assistant. Use Google Search to find 2-3 of the latest, most popular laptops reviewed on top tech sites like The Verge, CNET, PCMag, or Engadget in the last 3 months. Exclude any laptops from this list: [${existingLaptopNames.join(', ')}]. For each new laptop found, extract its detailed specifications and estimate its scores from 0-10 for the given categories based on the reviews. Return the data in the required JSON format. If no new, highly-reviewed laptops are found, return a JSON object with an empty "laptops" array.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: prompt,
+      // FIX: Per Gemini API guidelines, responseMimeType and responseSchema cannot be used with the googleSearch tool.
+      config: {
+        tools: [{ googleSearch: {} }],
+      },
+    });
+
+    const jsonText = response.text.trim();
+    const result = JSON.parse(jsonText);
+    
+    return result.laptops || [];
+
+  } catch (error) {
+    console.error("Error scraping for new laptops with Gemini:", error);
+    throw new Error("Failed to scrape for new laptops. The AI might have been unable to find or parse information from the web.");
   }
 };
