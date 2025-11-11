@@ -30,6 +30,9 @@ export interface Laptop {
   weightedScore?: number;
 }
 
+// FIX: Moved LaptopData type from firebaseService.ts to make it available globally.
+export type LaptopData = Omit<Laptop, 'id' | 'last_updated' | 'weightedScore'>;
+
 export interface Filters {
   price: {
     min: number;

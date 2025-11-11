@@ -1,11 +1,12 @@
 import React from 'react';
 
-const AdminPanel: React.FC = () => {
-  
-  const handleAiSearch = () => {
-    alert("Feature in development: This will use AI to search for newly released laptops and suggest them for addition to the database.");
-  };
+interface AdminPanelProps {
+  onFindNewLaptops: () => void;
+  isFinding: boolean;
+}
 
+const AdminPanel: React.FC<AdminPanelProps> = ({ onFindNewLaptops, isFinding }) => {
+  
   const handleWebScrape = () => {
     alert("Feature in development: This would trigger a backend process to scrape specified websites for new laptop data.");
   };
@@ -18,10 +19,11 @@ const AdminPanel: React.FC = () => {
       </p>
       <div className="space-y-3">
         <button
-          onClick={handleAiSearch}
-          className="w-full bg-secondary text-secondary-foreground font-bold py-2 px-4 rounded-md transition-colors hover:bg-secondary/80"
+          onClick={onFindNewLaptops}
+          disabled={isFinding}
+          className="w-full bg-secondary text-secondary-foreground font-bold py-2 px-4 rounded-md transition-colors hover:bg-secondary/80 disabled:opacity-50 disabled:cursor-wait"
         >
-          Find New Laptops (AI)
+          {isFinding ? 'Searching...' : 'Find New Laptops (AI)'}
         </button>
         <button
           onClick={handleWebScrape}

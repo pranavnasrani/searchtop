@@ -1,12 +1,12 @@
 
+
 import { collection, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
-import { Laptop } from '../types';
+// FIX: Import LaptopData from the centralized types.ts file.
+import { Laptop, LaptopData } from '../types';
 
+// FIX: Removed the LaptopData type definition as it has been moved to types.ts.
 // Type for data when creating/updating a laptop, excluding read-only fields
-export type LaptopData = Omit<Laptop, 'id' | 'last_updated' | 'weightedScore'>;
-
-
 export const fetchLaptops = async (): Promise<Laptop[]> => {
   try {
     const laptopsCollection = collection(db, 'laptops');

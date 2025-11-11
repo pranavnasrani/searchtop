@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from "@google/genai";
-import { Weights, GroundingChunk } from "../types";
+import { Weights, GroundingChunk, Laptop, LaptopData } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
@@ -114,5 +114,73 @@ export const getWebRecommendations = async (
   } catch (error) {
     console.error("Error getting web recommendations from Gemini:", error);
     throw new Error("Failed to get AI recommendations. The model may be unavailable.");
+  }
+};
+
+const newLaptopSchema = {
+    type: Type.OBJECT,
+    properties: {
+        laptops: {
+            type: Type.ARRAY,
+            description: "An array of new laptop objects.",
+            items: {
+                type: Type.OBJECT,
+                properties: {
+                    name: { type: Type.STRING, description: "Full name of the laptop model." },
+                    brand: { type: Type.STRING, description: "Brand name, e.g., 'Apple', 'Dell'." },
+                    price: { type: Type.INTEGER, description: "Estimated price in USD." },
+                    release_date: { type: Type.STRING, description: "Release date in YYYY-MM-DD format." },
+                    image_urls: { type: Type.ARRAY, items: { type: Type.STRING }, description: "Array of image URLs. Can be empty." },
+                    cpu: { type: Type.STRING, description: "CPU model, e.g., 'Apple M3 Pro'." },
+                    gpu: { type: Type.STRING, description: "GPU model, e.g., 'Integrated 14-core GPU'." },
+                    ram: { type: Type.STRING, description: "RAM configuration, e.g., '16GB Unified Memory'." },
+                    storage: { type: Type.STRING, description: "Storage configuration, e.g., '512GB SSD'." },
+                    display: { type: Type.STRING, description: "Display specifications, e.g., '14.2-inch Liquid Retina XDR'." },
+                    battery: { type: Type.STRING, description: "Battery life estimation, e.g., 'Up to 18 hours'." },
+                    build: { type: Type.STRING, description: "Build materials and dimensions, e.g., 'Aluminum chassis, 1.55 cm thin'." },
+                    audio: { type: Type.STRING, description: "Audio system description, e.g., 'High-fidelity six-speaker sound system'." },
+                    ports: { type: Type.STRING, description: "List of available ports, e.g., '3x Thunderbolt 4, HDMI, SDXC card slot'." },
+                    scores: {
+                        type: Type.OBJECT,
+                        properties: {
+                            performance: { type: Type.INTEGER, description: "Estimated score from 0-10 for performance." },
+                            battery: { type: Type.INTEGER, description: "Estimated score from 0-10 for battery life." },
+                            build_quality: { type: Type.INTEGER, description: "Estimated score from 0-10 for build quality." },
+                            display: { type: Type.INTEGER, description: "Estimated score from 0-10 for display quality." },
+                            audio: { type: Type.INTEGER, description: "Estimated score from 0-10 for audio quality." },
+                            portability: { type: Type.INTEGER, description: "Estimated score from 0-10 for portability." },
+                        },
+                        required: ["performance", "battery", "build_quality", "display", "audio", "portability"]
+                    }
+                },
+                required: ["name", "brand", "price", "release_date", "cpu", "gpu", "ram", "storage", "display", "scores"]
+            }
+        }
+    },
+    required: ["laptops"]
+};
+
+
+export const findNewLaptops = async (existingLaptopNames: string[]): Promise<LaptopData[]> => {
+  try {
+    const prompt = `You are a laptop technology expert. Find 3-5 recently released high-profile laptops (from the last 6 months) that are NOT in this list of existing laptops: [${existingLaptopNames.join(', ')}]. For each new laptop you find, provide its detailed specifications and estimate its scores from 0-10 for the given categories. Return the data in the required JSON format. Ensure all fields are filled to the best of your ability. If a specific detail isn't widely available, make a reasonable estimate.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-2.5-pro",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: newLaptopSchema,
+      },
+    });
+
+    const jsonText = response.text.trim();
+    const result = JSON.parse(jsonText);
+    
+    return result.laptops || [];
+
+  } catch (error) {
+    console.error("Error finding new laptops from Gemini:", error);
+    throw new Error("Failed to find new laptops. The model may be unavailable or returned an invalid response.");
   }
 };

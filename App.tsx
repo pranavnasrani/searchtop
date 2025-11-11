@@ -7,13 +7,14 @@ import Spinner from './components/Spinner';
 import LaptopDetailModal from './components/LaptopDetailModal';
 import { Laptop, Filters, Weights } from './types';
 import { fetchLaptops, addLaptop, updateLaptop, deleteLaptop, LaptopData } from './services/firebaseService';
-import { getWeightsFromQuery } from './services/geminiService';
+import { getWeightsFromQuery, findNewLaptops } from './services/geminiService';
 import WeightagePanel from './components/WeightagePanel';
 import { useAuth } from './contexts/AuthContext';
 import LaptopFormModal from './components/LaptopFormModal';
 import { PlusIcon } from './components/icons/PlusIcon';
 import AdminPanel from './components/AdminPanel';
 import AiWebSearchCard from './components/AiWebSearchCard';
+import SuggestionsModal from './components/SuggestionsModal';
 
 const App: React.FC = () => {
   const [allLaptops, setAllLaptops] = useState<Laptop[]>([]);
@@ -39,6 +40,11 @@ const App: React.FC = () => {
     gpus: [],
   });
   
+  // State for Admin "Find New Laptops" feature
+  const [isFindingLaptops, setIsFindingLaptops] = useState(false);
+  const [suggestedLaptops, setSuggestedLaptops] = useState<LaptopData[] | null>(null);
+  const [findError, setFindError] = useState<string | null>(null);
+
   const loadLaptops = async () => {
     setIsLoading(true);
     setError(null);
@@ -158,6 +164,35 @@ const App: React.FC = () => {
     setEditingLaptop(laptop);
     setIsFormModalOpen(true);
   };
+
+  // Handlers for "Find New Laptops" feature
+  const handleFindNewLaptops = async () => {
+    setIsFindingLaptops(true);
+    setFindError(null);
+    setSuggestedLaptops(null);
+    try {
+      const existingNames = allLaptops.map(l => l.name);
+      const newLaptops = await findNewLaptops(existingNames);
+      setSuggestedLaptops(newLaptops);
+    } catch (e: any) {
+      console.error("Failed to find new laptops:", e);
+      setFindError(e.message || "An unknown error occurred while finding new laptops.");
+      setSuggestedLaptops([]); // Open modal to show the error
+    } finally {
+      setIsFindingLaptops(false);
+    }
+  };
+
+  const handleAddSuggestedLaptop = async (laptopData: LaptopData) => {
+    try {
+      await addLaptop(laptopData);
+      setSuggestedLaptops(prev => prev ? prev.filter(l => l.name !== laptopData.name) : null);
+      await loadLaptops(); // Refresh the main list
+    } catch (error) {
+      console.error("Failed to add suggested laptop:", error);
+      // This could be enhanced to show a toast notification
+    }
+  };
   
   return (
     <div className="bg-background min-h-screen text-foreground font-sans">
@@ -174,7 +209,7 @@ const App: React.FC = () => {
                 allGpus={uniqueGpus}
                 priceRange={priceRange}
             />
-            {isAdmin && <AdminPanel />}
+            {isAdmin && <AdminPanel onFindNewLaptops={handleFindNewLaptops} isFinding={isFindingLaptops} />}
           </aside>
 
           <div className="lg:col-span-3">
@@ -220,6 +255,15 @@ const App: React.FC = () => {
             setEditingLaptop(null);
           }} 
           onSave={handleSaveLaptop}
+        />
+      )}
+      {suggestedLaptops !== null && (
+        <SuggestionsModal
+          laptops={suggestedLaptops}
+          onClose={() => setSuggestedLaptops(null)}
+          onAdd={handleAddSuggestedLaptop}
+          error={findError}
+          onRetry={handleFindNewLaptops}
         />
       )}
     </div>
