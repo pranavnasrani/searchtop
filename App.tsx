@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Laptop, Weights, Filters } from './types';
-import { fetchLaptops } from './services/firebaseService';
+import { Laptop, Weights, Filters, Scores } from './types';
+import { fetchLaptops, addLaptop, updateLaptop, deleteLaptop, LaptopData } from './services/firebaseService';
 import { getPreferenceWeights } from './services/geminiService';
 import Header from './components/Header';
 import PreferenceInput from './components/PreferenceInput';
@@ -10,14 +10,21 @@ import LaptopCard from './components/LaptopCard';
 import LaptopDetailModal from './components/LaptopDetailModal';
 import Spinner from './components/Spinner';
 import WeightagePanel from './components/WeightagePanel';
+import { useAuth } from './contexts/AuthContext';
+import LaptopFormModal from './components/LaptopFormModal';
+import AdminPanel from './components/AdminPanel';
+import { PlusIcon } from './components/icons/PlusIcon';
 
 const App: React.FC = () => {
   const [allLaptops, setAllLaptops] = useState<Laptop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [selectedLaptop, setSelectedLaptop] = useState<Laptop | null>(null);
+  const [isFormModalOpen, setIsFormModalOpen] = useState(false);
+  const [currentlyEditingLaptop, setCurrentlyEditingLaptop] = useState<Laptop | null>(null);
   
-  // FIX: Updated initial weights to use 'build_quality' to match the updated Weights interface.
+  const { isAdmin } = useAuth();
+  
   const [weights, setWeights] = useState<Weights>({
     performance: 5, battery: 5, build_quality: 5, display: 5, audio: 5, portability: 5, price: 5,
   });
@@ -76,6 +83,48 @@ const App: React.FC = () => {
     setWeights(newWeights);
   };
 
+  const handleOpenAddModal = () => {
+    setCurrentlyEditingLaptop(null);
+    setIsFormModalOpen(true);
+  };
+
+  const handleOpenEditModal = (laptop: Laptop) => {
+    setCurrentlyEditingLaptop(laptop);
+    setIsFormModalOpen(true);
+  };
+
+  const handleCloseFormModal = () => {
+    setIsFormModalOpen(false);
+    setCurrentlyEditingLaptop(null);
+  };
+  
+  const handleSaveLaptop = async (laptopData: LaptopData) => {
+    try {
+      if (currentlyEditingLaptop) {
+        await updateLaptop(currentlyEditingLaptop.id, laptopData);
+      } else {
+        await addLaptop(laptopData);
+      }
+      handleCloseFormModal();
+      await loadLaptops();
+    } catch(e) {
+      console.error("Failed to save laptop", e);
+      alert("Error: Could not save laptop.");
+    }
+  };
+
+  const handleDeleteLaptop = async (id: string) => {
+    if (window.confirm("Are you sure you want to delete this laptop?")) {
+        try {
+            await deleteLaptop(id);
+            await loadLaptops();
+        } catch(e) {
+            console.error("Failed to delete laptop", e);
+            alert("Error: Could not delete laptop.");
+        }
+    }
+  };
+
   const scoredAndFilteredLaptops = useMemo(() => {
     if (allLaptops.length === 0) return [];
 
@@ -86,7 +135,6 @@ const App: React.FC = () => {
     const scored = allLaptops.map(laptop => {
       const priceScore = maxPrice === minPrice ? 10 : 10 - ((laptop.price - minPrice) / (maxPrice - minPrice)) * 10;
       
-      // FIX: Changed weights.build to weights.build_quality to correctly calculate totalScore and fix type errors.
       const totalScore =
         laptop.scores.performance * weights.performance +
         laptop.scores.battery * weights.battery +
@@ -96,8 +144,6 @@ const App: React.FC = () => {
         laptop.scores.portability * weights.portability +
         priceScore * weights.price;
 
-      // FIX: Replaced Object.values with a type-safe Object.keys approach to correctly calculate totalWeight.
-      // This resolves TypeScript errors by ensuring that only numeric values from the 'weights' object are summed.
       const totalWeight = (Object.keys(weights) as Array<keyof Weights>).reduce((sum, key) => sum + weights[key], 0);
       const weightedScore = totalWeight > 0 ? totalScore / totalWeight : 0;
       
@@ -134,6 +180,7 @@ const App: React.FC = () => {
 
           <aside className="lg:w-1/4 xl:w-1/5 mb-8 lg:mb-0">
             <div className="lg:sticky lg:top-24 space-y-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:pr-4">
+              {isAdmin && <AdminPanel />}
               <PreferenceInput onSubmit={handlePreferenceSubmit} isLoading={isAnalyzing} />
               <WeightagePanel weights={weights} onWeightsChange={handleWeightsChange} />
               <FilterPanel 
@@ -147,12 +194,30 @@ const App: React.FC = () => {
           </aside>
           
           <main className="lg:w-3/4 xl:w-4/5">
+            {isAdmin && (
+              <div className="mb-6 flex justify-end">
+                <button 
+                  onClick={handleOpenAddModal}
+                  className="flex items-center gap-2 bg-primary text-primary-foreground font-bold py-2 px-4 rounded-md transition-colors hover:bg-primary/90"
+                >
+                  <PlusIcon className="w-5 h-5" />
+                  Add New Laptop
+                </button>
+              </div>
+            )}
             {isLoading ? (
               <div className="flex justify-center items-center h-96"><Spinner /></div>
             ) : scoredAndFilteredLaptops.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
                 {scoredAndFilteredLaptops.map(laptop => (
-                  <LaptopCard key={laptop.id} laptop={laptop} onSelect={setSelectedLaptop} />
+                  <LaptopCard 
+                    key={laptop.id} 
+                    laptop={laptop} 
+                    onSelect={setSelectedLaptop} 
+                    isAdmin={isAdmin}
+                    onEdit={handleOpenEditModal}
+                    onDelete={handleDeleteLaptop}
+                  />
                 ))}
               </div>
             ) : (
@@ -166,6 +231,7 @@ const App: React.FC = () => {
       </div>
 
       {selectedLaptop && <LaptopDetailModal laptop={selectedLaptop} onClose={() => setSelectedLaptop(null)} />}
+      {isFormModalOpen && <LaptopFormModal laptop={currentlyEditingLaptop} onClose={handleCloseFormModal} onSave={handleSaveLaptop} />}
     </div>
   );
 };

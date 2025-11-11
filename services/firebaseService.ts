@@ -1,7 +1,11 @@
 
-import { collection, getDocs, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, Timestamp, addDoc, serverTimestamp, doc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { db } from './firebaseConfig';
 import { Laptop } from '../types';
+
+// Type for data when creating/updating a laptop, excluding read-only fields
+export type LaptopData = Omit<Laptop, 'id' | 'last_updated' | 'weightedScore'>;
+
 
 export const fetchLaptops = async (): Promise<Laptop[]> => {
   try {
@@ -30,8 +34,42 @@ export const fetchLaptops = async (): Promise<Laptop[]> => {
     return laptopList;
   } catch (error) {
     console.error("Error fetching laptops from Firestore:", error);
-    // Returning an empty array to prevent the app from crashing.
-    // The UI should handle the empty state.
     return [];
+  }
+};
+
+export const addLaptop = async (laptopData: LaptopData): Promise<void> => {
+  try {
+    const laptopsCollection = collection(db, 'laptops');
+    await addDoc(laptopsCollection, {
+      ...laptopData,
+      last_updated: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error adding laptop to Firestore:", error);
+    throw error;
+  }
+};
+
+export const updateLaptop = async (id: string, laptopData: Partial<LaptopData>): Promise<void> => {
+  try {
+    const laptopDoc = doc(db, 'laptops', id);
+    await updateDoc(laptopDoc, {
+        ...laptopData,
+        last_updated: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error("Error updating laptop in Firestore:", error);
+    throw error;
+  }
+};
+
+export const deleteLaptop = async (id: string): Promise<void> => {
+  try {
+    const laptopDoc = doc(db, 'laptops', id);
+    await deleteDoc(laptopDoc);
+  } catch (error) {
+    console.error("Error deleting laptop from Firestore:", error);
+    throw error;
   }
 };
