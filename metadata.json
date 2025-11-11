@@ -1,0 +1,5 @@
+{
+  "name": "LaptopFinder",
+  "description": "An AI-powered web application to help users find and compare laptops based on their preferences by converting natural language descriptions into weighted scores.",
+  "requestFramePermissions": []
+}
