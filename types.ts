@@ -39,3 +39,12 @@ export interface Filters {
   displaySizes: number[];
   gpus: string[];
 }
+
+export interface WebSearchResult {
+  uri: string;
+  title: string;
+}
+
+export interface GroundingChunk {
+  web: WebSearchResult;
+}

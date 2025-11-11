@@ -2,11 +2,14 @@ import React, { createContext, useContext, useState, useEffect, ReactNode } from
 import { auth } from '../services/firebaseConfig';
 import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 
+const ADMIN_EMAIL = 'pranavnasrani@gmail.com';
+
 interface AuthContextType {
   user: User | null;
   login: () => Promise<void>;
   logout: () => Promise<void>;
   loading: boolean;
+  isAdmin: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -14,6 +17,8 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
@@ -40,7 +45,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  const value = { user, login, logout, loading };
+  const value = { user, login, logout, loading, isAdmin };
 
   return (
     <AuthContext.Provider value={value}>
