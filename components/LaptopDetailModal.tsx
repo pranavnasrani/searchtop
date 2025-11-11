@@ -46,7 +46,6 @@ const LaptopDetailModal: React.FC<LaptopDetailModalProps> = ({ laptop, onClose }
 
         <div className="p-6 grid grid-cols-1 lg:grid-cols-2 gap-8">
           <div>
-            <img src={laptop.image_urls[0]} alt={laptop.name} className="w-full rounded-lg object-cover mb-6" />
             <h3 className="text-xl font-semibold mb-3 text-card-foreground">Scores</h3>
             <div className="space-y-3">
               <ScoreBar label="Performance" score={laptop.scores.performance} />

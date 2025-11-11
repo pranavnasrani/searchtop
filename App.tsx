@@ -39,8 +39,8 @@ const App: React.FC = () => {
       
       if(laptopsData.length > 0) {
         const prices = laptopsData.map(l => l.price);
-        const minPrice = Math.min(...prices);
-        const maxPrice = Math.max(...prices);
+        const minPrice = Math.floor(Math.min(...prices) / 100) * 100;
+        const maxPrice = Math.ceil(Math.max(...prices) / 100) * 100;
         const priceRange = { min: minPrice, max: maxPrice };
         setInitialPriceRange(priceRange);
         setFilters(prev => ({...prev, price: priceRange}));
@@ -59,8 +59,16 @@ const App: React.FC = () => {
 
   const handlePreferenceSubmit = async (text: string) => {
     setIsAnalyzing(true);
-    const newWeights = await getPreferenceWeights(text);
-    setWeights(newWeights);
+    const preferenceData = await getPreferenceWeights(text);
+    setWeights(preferenceData.weights);
+    if (preferenceData.priceRange) {
+        const newMin = Math.max(initialPriceRange.min, preferenceData.priceRange.min);
+        const newMax = Math.min(initialPriceRange.max, preferenceData.priceRange.max);
+
+        if (newMin <= newMax) {
+             setFilters(prev => ({ ...prev, price: { min: newMin, max: newMax } }));
+        }
+    }
     setIsAnalyzing(false);
   };
 
@@ -97,7 +105,7 @@ const App: React.FC = () => {
     });
 
     const filtered = scored.filter(laptop => {
-      if (laptop.price > filters.price.max) return false;
+      if (laptop.price < filters.price.min || laptop.price > filters.price.max) return false;
       if (filters.brands.length > 0 && !filters.brands.includes(laptop.brand)) return false;
       const displaySize = parseFloat(laptop.display);
       if (filters.displaySizes.length > 0 && !filters.displaySizes.some(size => displaySize >= size && displaySize < size + 1)) return false;
@@ -125,7 +133,7 @@ const App: React.FC = () => {
         <div className="flex flex-col lg:flex-row lg:gap-8">
 
           <aside className="lg:w-1/4 xl:w-1/5 mb-8 lg:mb-0">
-            <div className="lg:sticky lg:top-24 space-y-6">
+            <div className="lg:sticky lg:top-24 space-y-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:pr-4">
               <PreferenceInput onSubmit={handlePreferenceSubmit} isLoading={isAnalyzing} />
               <WeightagePanel weights={weights} onWeightsChange={handleWeightsChange} />
               <FilterPanel 

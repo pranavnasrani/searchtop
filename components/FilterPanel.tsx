@@ -13,8 +13,20 @@ const displaySizeOptions = [13, 14, 15, 16, 17];
 
 const FilterPanel: React.FC<FilterPanelProps> = ({ filters, onFilterChange, allBrands, allGpus, priceRange }) => {
 
-  const handlePriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    onFilterChange({ ...filters, price: { ...filters.price, max: Number(e.target.value) } });
+  const handleMinPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newMin = Number(e.target.value);
+    onFilterChange({
+      ...filters,
+      price: { min: newMin, max: Math.max(newMin, filters.price.max) }
+    });
+  };
+  
+  const handleMaxPriceChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const newMax = Number(e.target.value);
+    onFilterChange({
+      ...filters,
+      price: { min: Math.min(newMax, filters.price.min), max: newMax }
+    });
   };
 
   const handleBrandChange = (brand: string) => {
@@ -43,19 +55,34 @@ const FilterPanel: React.FC<FilterPanelProps> = ({ filters, onFilterChange, allB
       <h2 className="text-lg font-semibold mb-4 text-card-foreground">Filters</h2>
       
       <div className="mb-6">
-        <label htmlFor="price" className="block text-sm font-medium text-muted-foreground mb-2">Max Price: ${filters.price.max}</label>
-        <input
-          type="range"
-          id="price"
-          min={priceRange.min}
-          max={priceRange.max}
-          value={filters.price.max}
-          onChange={handlePriceChange}
-          className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
-        />
+        <label htmlFor="price" className="block text-sm font-medium text-muted-foreground mb-2">
+          Price Range: ${filters.price.min.toLocaleString()} - ${filters.price.max.toLocaleString()}
+        </label>
+        <div className="space-y-3">
+            <input
+              type="range"
+              id="min-price"
+              min={priceRange.min}
+              max={priceRange.max}
+              value={filters.price.min}
+              onChange={handleMinPriceChange}
+              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+              aria-label="Minimum price"
+            />
+            <input
+              type="range"
+              id="max-price"
+              min={priceRange.min}
+              max={priceRange.max}
+              value={filters.price.max}
+              onChange={handleMaxPriceChange}
+              className="w-full h-2 bg-secondary rounded-lg appearance-none cursor-pointer accent-primary"
+              aria-label="Maximum price"
+            />
+        </div>
         <div className="flex justify-between text-xs text-muted-foreground mt-1">
-          <span>${priceRange.min}</span>
-          <span>${priceRange.max}</span>
+          <span>${priceRange.min.toLocaleString()}</span>
+          <span>${priceRange.max.toLocaleString()}</span>
         </div>
       </div>
       
