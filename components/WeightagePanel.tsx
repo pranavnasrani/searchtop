@@ -29,7 +29,8 @@ const WeightagePanel: React.FC<WeightagePanelProps> = ({ weights, onWeightsChang
           <div key={key}>
             <div className="flex justify-between items-center mb-1">
               <label htmlFor={key} className="text-sm font-medium text-foreground">
-                {formatLabel(key)}
+                {/* FIX: Explicitly cast key to string to resolve potential type inference issue. */}
+                {formatLabel(String(key))}
               </label>
               <span className="text-sm font-bold text-primary w-8 text-center bg-secondary rounded-md px-2 py-0.5">{weights[key]}</span>
             </div>

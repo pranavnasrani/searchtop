@@ -1,43 +1,34 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 import { auth } from '../services/firebaseConfig';
-
-// --- IMPORTANT ---
-// For this demo, the admin email is hardcoded. 
-// In a production app, use Firebase Custom Claims for secure role management.
-const ADMIN_EMAIL = 'demo@example.com'; // Replace with your admin Google account email
+import { onAuthStateChanged, User, signInWithPopup, GoogleAuthProvider, signOut } from 'firebase/auth';
 
 interface AuthContextType {
   user: User | null;
-  isAdmin: boolean;
-  loading: boolean;
   login: () => Promise<void>;
   logout: () => Promise<void>;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
-  const [isAdmin, setIsAdmin] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
-      setIsAdmin(currentUser?.email === ADMIN_EMAIL);
       setLoading(false);
     });
-
     return () => unsubscribe();
   }, []);
 
   const login = async () => {
-    const provider = new GoogleAuthProvider();
     try {
+      const provider = new GoogleAuthProvider();
       await signInWithPopup(auth, provider);
     } catch (error) {
-      console.error("Authentication error:", error);
+      console.error("Error during sign-in:", error);
     }
   };
 
@@ -45,11 +36,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       await signOut(auth);
     } catch (error) {
-      console.error("Sign out error:", error);
+      console.error("Error during sign-out:", error);
     }
   };
 
-  const value = { user, isAdmin, loading, login, logout };
+  const value = { user, login, logout, loading };
 
   return (
     <AuthContext.Provider value={value}>

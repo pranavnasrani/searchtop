@@ -1,82 +1,67 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
-import { Weights } from '../types';
+import { Weights } from "../types";
 
 const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-// FIX: Renamed 'build' to 'build_quality' to match the updated Weights interface.
 const schema = {
   type: Type.OBJECT,
   properties: {
-    performance: { type: Type.NUMBER, description: 'Weight for processing power (CPU, GPU, RAM).' },
-    battery: { type: Type.NUMBER, description: 'Weight for battery life and longevity.' },
-    build_quality: { type: Type.NUMBER, description: 'Weight for build quality, materials, and durability.' },
-    display: { type: Type.NUMBER, description: 'Weight for screen quality, resolution, and color accuracy.' },
-    audio: { type: Type.NUMBER, description: 'Weight for speaker and microphone quality.' },
-    portability: { type: Type.NUMBER, description: 'Weight for lightness and compactness.' },
-    price: { type: Type.NUMBER, description: 'Weight for affordability (lower price is better).' },
-    min_price: { type: Type.NUMBER, description: 'The minimum price specified by the user, if any.' },
-    max_price: { type: Type.NUMBER, description: 'The maximum price specified by the user, if any.' },
+    performance: {
+      type: Type.INTEGER,
+      description: "Score from 0-10 for performance needs (CPU, GPU, RAM). High for gaming, video editing. Low for browsing, documents.",
+    },
+    battery: {
+      type: Type.INTEGER,
+      description: "Score from 0-10 for battery life importance. High for travel, mobile use. Low for desktop replacement.",
+    },
+    build_quality: {
+      type: Type.INTEGER,
+      description: "Score from 0-10 for build quality importance (materials, durability). High for travel, longevity. Low for stationary use.",
+    },
+    display: {
+      type: Type.INTEGER,
+      description: "Score from 0-10 for display quality importance (resolution, color accuracy, brightness). High for creative work, media. Low for coding, writing.",
+    },
+    audio: {
+      type: Type.INTEGER,
+      description: "Score from 0-10 for audio quality importance (speakers). High for media consumption without headphones. Low otherwise.",
+    },
+    portability: {
+      type: Type.INTEGER,
+      description: "Score from 0-10 for portability importance (weight, size). High for frequent commuters, students. Low for home/office use.",
+    },
   },
-  required: ['performance', 'battery', 'build_quality', 'display', 'audio', 'portability', 'price'],
+  required: ["performance", "battery", "build_quality", "display", "audio", "portability"]
 };
 
-export const getPreferenceWeights = async (preferenceText: string): Promise<{ weights: Weights; priceRange?: { min: number; max: number } }> => {
+
+export const getWeightsFromQuery = async (query: string): Promise<Weights> => {
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      // FIX: Updated prompt to ask for 'build_quality' weight.
-      contents: `Analyze the following user preference for a laptop and assign a weight from 0 to 10 for each of these categories: performance, battery, build_quality, display, audio, portability, price. A higher weight means more importance. Also, if the user specifies a price range (e.g., "under $1000", "between $800 and $1200", "around $1500"), extract the minimum and maximum price points and include them as 'min_price' and 'max_price'. If only an upper bound is given (e.g., 'under $1000'), use 0 for min_price. If only a lower bound is given (e.g. 'over $1200'), use a high number like 10000 for max_price. Return the result as a JSON object that adheres to the provided schema. User preference: "${preferenceText}"`,
+      model: "gemini-2.5-flash",
+      contents: `Analyze the user's laptop preference and return a JSON object with weights from 0 to 10 for each category. The user says: "${query}"`,
       config: {
-        responseMimeType: 'application/json',
+        responseMimeType: "application/json",
         responseSchema: schema,
       },
     });
 
-    const jsonString = response.text.trim();
-    const parsedJson = JSON.parse(jsonString);
-    
-    // FIX: The original validation was not robust and could allow non-numeric properties
-    // to be passed through, causing type errors in App.tsx.
-    // This new implementation creates a clean `Weights` object, ensuring type safety.
-    // FIX: Updated default weights to use 'build_quality'.
-    const validatedWeights: Weights = {
-      performance: 5,
-      battery: 5,
-      build_quality: 5,
-      display: 5,
-      audio: 5,
-      portability: 5,
-      price: 5,
-    };
+    const jsonText = response.text.trim();
+    const weights = JSON.parse(jsonText);
 
-    for (const key of Object.keys(validatedWeights) as Array<keyof Weights>) {
-      const value = parsedJson?.[key];
-      if (typeof value === 'number' && value >= 0 && value <= 10) {
-        validatedWeights[key] = value;
-      } else if (parsedJson && Object.prototype.hasOwnProperty.call(parsedJson, key)) {
-        console.warn(`Invalid or out-of-range weight for ${key}: ${value}. Using default.`);
+    // Basic validation to ensure the result matches the Weights type
+    const requiredKeys: (keyof Weights)[] = ["performance", "battery", "build_quality", "display", "audio", "portability"];
+    for (const key of requiredKeys) {
+      if (typeof weights[key] !== 'number' || weights[key] < 0 || weights[key] > 10) {
+        throw new Error(`Invalid or missing weight for ${key}`);
       }
     }
 
-    let priceRange: { min: number; max: number } | undefined = undefined;
-    if (typeof parsedJson?.min_price === 'number' && typeof parsedJson?.max_price === 'number') {
-        priceRange = { min: parsedJson.min_price, max: parsedJson.max_price };
-    } else if (typeof parsedJson?.max_price === 'number') {
-        priceRange = { min: 0, max: parsedJson.max_price };
-    }
+    return weights as Weights;
 
-
-    return { weights: validatedWeights, priceRange };
   } catch (error) {
-    console.error("Error getting preference weights from Gemini API:", error);
-    // Return a default set of weights on error
-    // FIX: Updated fallback weights to use 'build_quality'.
-    return {
-      weights: {
-        performance: 5, battery: 5, build_quality: 5, display: 5,
-        audio: 5, portability: 5, price: 5,
-      }
-    };
+    console.error("Error getting weights from Gemini:", error);
+    // Fallback to default weights in case of an error
+    return { performance: 5, battery: 5, build_quality: 5, display: 5, audio: 5, portability: 5 };
   }
 };

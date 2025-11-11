@@ -1,5 +1,3 @@
-
-
 export interface Scores {
   performance: number;
   battery: number;
@@ -8,6 +6,8 @@ export interface Scores {
   audio: number;
   portability: number;
 }
+
+export type Weights = Scores;
 
 export interface Laptop {
   id: string;
@@ -30,19 +30,11 @@ export interface Laptop {
   weightedScore?: number;
 }
 
-export interface Weights {
-  performance: number;
-  battery: number;
-  // FIX: Renamed 'build' to 'build_quality' to match the 'Scores' interface for consistency.
-  build_quality: number;
-  display: number;
-  audio: number;
-  portability: number;
-  price: number;
-}
-
 export interface Filters {
-  price: { min: number; max: number };
+  price: {
+    min: number;
+    max: number;
+  };
   brands: string[];
   displaySizes: number[];
   gpus: string[];

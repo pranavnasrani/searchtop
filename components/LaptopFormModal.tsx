@@ -75,7 +75,8 @@ const LaptopFormModal: React.FC<LaptopFormModalProps> = ({ laptop, onClose, onSa
           <h3 className="text-lg font-semibold pt-4 border-t border-border">Scores (0-10)</h3>
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {(Object.keys(defaultScores) as Array<keyof Scores>).map(key => (
-               <ScoreField key={key} label={key.replace('_', ' ')} name={key} value={formData.scores[key]} onChange={handleScoreChange} />
+               // FIX: Explicitly cast key to string to resolve potential type inference issue.
+               <ScoreField key={key} label={String(key).replace('_', ' ')} name={key} value={formData.scores[key]} onChange={handleScoreChange} />
             ))}
           </div>
 

@@ -1,35 +1,34 @@
-
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { Laptop, Weights, Filters, Scores } from './types';
-import { fetchLaptops, addLaptop, updateLaptop, deleteLaptop, LaptopData } from './services/firebaseService';
-import { getPreferenceWeights } from './services/geminiService';
+import React, { useState, useEffect, useMemo } from 'react';
 import Header from './components/Header';
 import PreferenceInput from './components/PreferenceInput';
 import FilterPanel from './components/FilterPanel';
 import LaptopCard from './components/LaptopCard';
-import LaptopDetailModal from './components/LaptopDetailModal';
 import Spinner from './components/Spinner';
+import LaptopDetailModal from './components/LaptopDetailModal';
+import { Laptop, Filters, Weights } from './types';
+import { fetchLaptops, addLaptop, updateLaptop, deleteLaptop, LaptopData } from './services/firebaseService';
+import { getWeightsFromQuery } from './services/geminiService';
 import WeightagePanel from './components/WeightagePanel';
 import { useAuth } from './contexts/AuthContext';
 import LaptopFormModal from './components/LaptopFormModal';
-import AdminPanel from './components/AdminPanel';
 import { PlusIcon } from './components/icons/PlusIcon';
+import AdminPanel from './components/AdminPanel';
 
 const App: React.FC = () => {
   const [allLaptops, setAllLaptops] = useState<Laptop[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [isGeminiLoading, setIsGeminiLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [selectedLaptop, setSelectedLaptop] = useState<Laptop | null>(null);
+  
+  const [editingLaptop, setEditingLaptop] = useState<Laptop | null>(null);
   const [isFormModalOpen, setIsFormModalOpen] = useState(false);
-  const [currentlyEditingLaptop, setCurrentlyEditingLaptop] = useState<Laptop | null>(null);
-  
-  const { isAdmin } = useAuth();
-  
-  const [weights, setWeights] = useState<Weights>({
-    performance: 5, battery: 5, build_quality: 5, display: 5, audio: 5, portability: 5, price: 5,
-  });
-  
-  const [initialPriceRange, setInitialPriceRange] = useState({ min: 0, max: 5000 });
+
+  const { user } = useAuth();
+  const isAdmin = useMemo(() => user?.email === 'admin@example.com' || process.env.NODE_ENV === 'development', [user]); // Simplified admin check
+
+  const defaultWeights: Weights = { performance: 5, battery: 5, build_quality: 5, display: 5, audio: 5, portability: 5 };
+  const [weights, setWeights] = useState<Weights>(defaultWeights);
 
   const [filters, setFilters] = useState<Filters>({
     price: { min: 0, max: 5000 },
@@ -37,201 +36,175 @@ const App: React.FC = () => {
     displaySizes: [],
     gpus: [],
   });
-
-  const loadLaptops = useCallback(async () => {
+  
+  const loadLaptops = async () => {
     setIsLoading(true);
+    setError(null);
     try {
-      const laptopsData = await fetchLaptops();
-      setAllLaptops(laptopsData);
-      
-      if(laptopsData.length > 0) {
-        const prices = laptopsData.map(l => l.price);
-        const minPrice = Math.floor(Math.min(...prices) / 100) * 100;
-        const maxPrice = Math.ceil(Math.max(...prices) / 100) * 100;
-        const priceRange = { min: minPrice, max: maxPrice };
-        setInitialPriceRange(priceRange);
-        setFilters(prev => ({...prev, price: priceRange}));
-      }
-
-    } catch (error) {
-      console.error("Failed to fetch laptops:", error);
+      const laptops = await fetchLaptops();
+      setAllLaptops(laptops);
+    } catch (e) {
+      setError("Failed to load laptops. Please try again.");
+      console.error(e);
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  };
 
   useEffect(() => {
     loadLaptops();
-  }, [loadLaptops]);
-
-  const handlePreferenceSubmit = async (text: string) => {
-    setIsAnalyzing(true);
-    const preferenceData = await getPreferenceWeights(text);
-    setWeights(preferenceData.weights);
-    if (preferenceData.priceRange) {
-        const newMin = Math.max(initialPriceRange.min, preferenceData.priceRange.min);
-        const newMax = Math.min(initialPriceRange.max, preferenceData.priceRange.max);
-
-        if (newMin <= newMax) {
-             setFilters(prev => ({ ...prev, price: { min: newMin, max: newMax } }));
-        }
-    }
-    setIsAnalyzing(false);
-  };
-
-  const handleWeightsChange = (newWeights: Weights) => {
+  }, []);
+  
+  const handlePreferenceSubmit = async (query: string) => {
+    setIsGeminiLoading(true);
+    const newWeights = await getWeightsFromQuery(query);
     setWeights(newWeights);
+    setIsGeminiLoading(false);
   };
 
-  const handleOpenAddModal = () => {
-    setCurrentlyEditingLaptop(null);
-    setIsFormModalOpen(true);
-  };
+  const calculateWeightedScore = (laptop: Laptop, currentWeights: Weights): number => {
+    const totalWeight = Object.values(currentWeights).reduce((sum, weight) => sum + weight, 0);
+    if (totalWeight === 0) return 0;
 
-  const handleOpenEditModal = (laptop: Laptop) => {
-    setCurrentlyEditingLaptop(laptop);
-    setIsFormModalOpen(true);
-  };
-
-  const handleCloseFormModal = () => {
-    setIsFormModalOpen(false);
-    setCurrentlyEditingLaptop(null);
+    let totalScore = 0;
+    for (const key of Object.keys(currentWeights) as Array<keyof Weights>) {
+      totalScore += (laptop.scores[key] / 10) * (currentWeights[key] / totalWeight);
+    }
+    return totalScore * 10;
   };
   
+  const { filteredAndSortedLaptops, uniqueBrands, uniqueGpus, priceRange } = useMemo(() => {
+    const scoredLaptops = allLaptops.map(laptop => ({
+      ...laptop,
+      weightedScore: calculateWeightedScore(laptop, weights),
+    }));
+
+    const filtered = scoredLaptops.filter(laptop => {
+      const { price, brands, displaySizes, gpus } = filters;
+      if (laptop.price < price.min || laptop.price > price.max) return false;
+      if (brands.length > 0 && !brands.includes(laptop.brand)) return false;
+      if (gpus.length > 0 && !gpus.some(gpuFilter => laptop.gpu.includes(gpuFilter))) return false;
+      if (displaySizes.length > 0) {
+        const size = parseFloat(laptop.display);
+        if (isNaN(size) || !displaySizes.some(s => size >= s && size < s + 1)) return false;
+      }
+      return true;
+    });
+
+    const sorted = filtered.sort((a, b) => (b.weightedScore || 0) - (a.weightedScore || 0));
+
+    const allBrands = [...new Set(allLaptops.map(l => l.brand))].sort();
+    const allGpus = [...new Set(allLaptops.map(l => l.gpu.split(' ')[0]))].filter(Boolean).sort();
+    const prices = allLaptops.map(l => l.price);
+    const pRange = { min: prices.length > 0 ? Math.min(...prices) : 0, max: prices.length > 0 ? Math.max(...prices) : 5000 };
+
+    return { filteredAndSortedLaptops: sorted, uniqueBrands: allBrands, uniqueGpus: allGpus, priceRange: pRange };
+  }, [allLaptops, filters, weights]);
+
+  useEffect(() => {
+      setFilters(prev => ({ ...prev, price: priceRange }));
+  }, [priceRange.min, priceRange.max]);
+
   const handleSaveLaptop = async (laptopData: LaptopData) => {
     try {
-      if (currentlyEditingLaptop) {
-        await updateLaptop(currentlyEditingLaptop.id, laptopData);
+      if (editingLaptop) {
+        await updateLaptop(editingLaptop.id, laptopData);
       } else {
         await addLaptop(laptopData);
       }
-      handleCloseFormModal();
-      await loadLaptops();
-    } catch(e) {
-      console.error("Failed to save laptop", e);
-      alert("Error: Could not save laptop.");
+      setIsFormModalOpen(false);
+      setEditingLaptop(null);
+      loadLaptops();
+    } catch (error) {
+      console.error("Failed to save laptop:", error);
+      setError("Failed to save laptop. Please try again.");
     }
   };
 
   const handleDeleteLaptop = async (id: string) => {
     if (window.confirm("Are you sure you want to delete this laptop?")) {
-        try {
-            await deleteLaptop(id);
-            await loadLaptops();
-        } catch(e) {
-            console.error("Failed to delete laptop", e);
-            alert("Error: Could not delete laptop.");
-        }
+      try {
+        await deleteLaptop(id);
+        loadLaptops();
+      } catch (error) {
+        console.error("Failed to delete laptop:", error);
+        setError("Failed to delete laptop. Please try again.");
+      }
     }
   };
 
-  const scoredAndFilteredLaptops = useMemo(() => {
-    if (allLaptops.length === 0) return [];
-
-    const prices = allLaptops.map(l => l.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-
-    const scored = allLaptops.map(laptop => {
-      const priceScore = maxPrice === minPrice ? 10 : 10 - ((laptop.price - minPrice) / (maxPrice - minPrice)) * 10;
-      
-      const totalScore =
-        laptop.scores.performance * weights.performance +
-        laptop.scores.battery * weights.battery +
-        laptop.scores.build_quality * weights.build_quality +
-        laptop.scores.display * weights.display +
-        laptop.scores.audio * weights.audio +
-        laptop.scores.portability * weights.portability +
-        priceScore * weights.price;
-
-      const totalWeight = (Object.keys(weights) as Array<keyof Weights>).reduce((sum, key) => sum + weights[key], 0);
-      const weightedScore = totalWeight > 0 ? totalScore / totalWeight : 0;
-      
-      return { ...laptop, weightedScore };
-    });
-
-    const filtered = scored.filter(laptop => {
-      if (laptop.price < filters.price.min || laptop.price > filters.price.max) return false;
-      if (filters.brands.length > 0 && !filters.brands.includes(laptop.brand)) return false;
-      const displaySize = parseFloat(laptop.display);
-      if (filters.displaySizes.length > 0 && !filters.displaySizes.some(size => displaySize >= size && displaySize < size + 1)) return false;
-      if (filters.gpus.length > 0 && !filters.gpus.some(gpuFilter => laptop.gpu.toLowerCase().includes(gpuFilter.toLowerCase()))) return false;
-      
-      return true;
-    });
-
-    return filtered.sort((a, b) => (b.weightedScore ?? 0) - (a.weightedScore ?? 0));
-  }, [allLaptops, weights, filters]);
+  const openAddModal = () => {
+    setEditingLaptop(null);
+    setIsFormModalOpen(true);
+  };
   
-  const uniqueBrands = useMemo(() => [...new Set(allLaptops.map(l => l.brand))].sort(), [allLaptops]);
-  const uniqueGpus = useMemo(() => {
-    const gpuSet = new Set<string>();
-    if (allLaptops.some(l => l.gpu.includes('RTX 40'))) gpuSet.add('RTX 40-series');
-    if (allLaptops.some(l => l.gpu.includes('RTX 30'))) gpuSet.add('RTX 30-series');
-    if (allLaptops.some(l => l.gpu.includes('Iris Xe') || l.gpu.includes('Radeon'))) gpuSet.add('Integrated');
-    return Array.from(gpuSet);
-  }, [allLaptops]);
-
+  const openEditModal = (laptop: Laptop) => {
+    setEditingLaptop(laptop);
+    setIsFormModalOpen(true);
+  };
+  
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="bg-background min-h-screen text-foreground font-sans">
       <Header onRefresh={loadLaptops} isLoading={isLoading} />
-      <div className="container mx-auto p-4 md:p-8">
-        <div className="flex flex-col lg:flex-row lg:gap-8">
-
-          <aside className="lg:w-1/4 xl:w-1/5 mb-8 lg:mb-0">
-            <div className="lg:sticky lg:top-24 space-y-6 lg:max-h-[calc(100vh-7.5rem)] lg:overflow-y-auto lg:pr-4">
-              {isAdmin && <AdminPanel />}
-              <PreferenceInput onSubmit={handlePreferenceSubmit} isLoading={isAnalyzing} />
-              <WeightagePanel weights={weights} onWeightsChange={handleWeightsChange} />
-              <FilterPanel 
-                  filters={filters} 
-                  onFilterChange={setFilters} 
-                  allBrands={uniqueBrands} 
-                  allGpus={uniqueGpus}
-                  priceRange={initialPriceRange} 
-              />
-            </div>
+      <main className="container mx-auto p-4 md:p-6">
+        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
+          <aside className="lg:col-span-1 space-y-6 lg:sticky top-24 h-max">
+            <PreferenceInput onSubmit={handlePreferenceSubmit} isLoading={isGeminiLoading} />
+            {weights !== defaultWeights && <WeightagePanel weights={weights} onWeightsChange={setWeights} />}
+            <FilterPanel 
+                filters={filters} 
+                onFilterChange={setFilters} 
+                allBrands={uniqueBrands}
+                allGpus={uniqueGpus}
+                priceRange={priceRange}
+            />
+            {isAdmin && <AdminPanel />}
           </aside>
-          
-          <main className="lg:w-3/4 xl:w-4/5">
-            {isAdmin && (
-              <div className="mb-6 flex justify-end">
-                <button 
-                  onClick={handleOpenAddModal}
-                  className="flex items-center gap-2 bg-primary text-primary-foreground font-bold py-2 px-4 rounded-md transition-colors hover:bg-primary/90"
-                >
-                  <PlusIcon className="w-5 h-5" />
-                  Add New Laptop
-                </button>
-              </div>
-            )}
+
+          <div className="lg:col-span-3">
             {isLoading ? (
-              <div className="flex justify-center items-center h-96"><Spinner /></div>
-            ) : scoredAndFilteredLaptops.length > 0 ? (
+              <div className="flex justify-center items-center h-96">
+                <Spinner />
+              </div>
+            ) : error ? (
+              <div className="text-center text-red-500 bg-red-100 dark:bg-red-900/50 p-4 rounded-lg">{error}</div>
+            ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
-                {scoredAndFilteredLaptops.map(laptop => (
+                {filteredAndSortedLaptops.map(laptop => (
                   <LaptopCard 
                     key={laptop.id} 
                     laptop={laptop} 
-                    onSelect={setSelectedLaptop} 
-                    isAdmin={isAdmin}
-                    onEdit={handleOpenEditModal}
+                    onSelect={setSelectedLaptop}
+                    onEdit={openEditModal}
                     onDelete={handleDeleteLaptop}
+                    isAdmin={isAdmin}
                   />
                 ))}
               </div>
-            ) : (
-                <div className="text-center py-16 bg-card rounded-lg border border-border">
-                    <h3 className="text-xl font-semibold">No Laptops Found</h3>
-                    <p className="text-muted-foreground mt-2">Try adjusting your filters or preferences.</p>
-                </div>
             )}
-          </main>
+             {isAdmin && (
+                <button 
+                    onClick={openAddModal} 
+                    className="fixed bottom-6 right-6 bg-primary text-primary-foreground p-4 rounded-full shadow-lg hover:bg-primary/90 transition-transform hover:scale-110"
+                    aria-label="Add new laptop"
+                >
+                    <PlusIcon className="w-6 h-6" />
+                </button>
+            )}
+          </div>
         </div>
-      </div>
-
+      </main>
       {selectedLaptop && <LaptopDetailModal laptop={selectedLaptop} onClose={() => setSelectedLaptop(null)} />}
-      {isFormModalOpen && <LaptopFormModal laptop={currentlyEditingLaptop} onClose={handleCloseFormModal} onSave={handleSaveLaptop} />}
+      {isFormModalOpen && (
+        <LaptopFormModal 
+          laptop={editingLaptop} 
+          onClose={() => {
+            setIsFormModalOpen(false);
+            setEditingLaptop(null);
+          }} 
+          onSave={handleSaveLaptop}
+        />
+      )}
     </div>
   );
 };
